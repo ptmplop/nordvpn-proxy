@@ -1,0 +1,70 @@
+#!/bin/bash
+
+[[ -z "$COUNTRY" ]] && echo "You must specify a country" && exit 1
+[[ -z "$USER" ]] && echo "You must specify a valid NordVPN username" && exit 1
+[[ -z "$PASS" ]] && echo "You must specify a valid NordVPN password" && exit 1
+
+echo "Connecting to NordVPN in [$COUNTRY]..."; sleep 0.25
+
+DOCKER_NET="$(ip -o addr show dev eth0 | awk '$3 == "inet" {print $4}')"
+
+kill_switch() {
+
+    iptables -F
+    iptables -X
+    iptables -P INPUT DROP
+    iptables -P FORWARD DROP
+    iptables -P OUTPUT DROP
+
+    ip6tables -P INPUT DROP
+    ip6tables -P FORWARD DROP
+    ip6tables -P OUTPUT DROP
+
+    iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+    iptables -A INPUT -i lo -j ACCEPT
+    iptables -A FORWARD -i lo -j ACCEPT
+    iptables -A OUTPUT -o lo -j ACCEPT
+
+    iptables -A OUTPUT -o nordlynx -j ACCEPT
+    iptables -A OUTPUT -m owner --gid-owner vpn -j ACCEPT
+
+    iptables -t nat -A POSTROUTING -o nordlynx -j MASQUERADE
+    if [[ -n ${DOCKER_NET} ]]; then
+        iptables -A INPUT -s ${DOCKER_NET} -j ACCEPT
+        iptables -A FORWARD -d ${DOCKER_NET} -j ACCEPT
+        iptables -A FORWARD -s ${DOCKER_NET} -j ACCEPT
+        iptables -A OUTPUT -d ${DOCKER_NET} -j ACCEPT
+    fi
+}
+
+create_tun_device() {
+        mkdir -p /dev/net
+        [[ -c /dev/net/tun ]] || mknod -m 0666 /dev/net/tun c 10 200
+}
+
+# Don't allow traffic when disconnected from NordVPN
+kill_switch
+
+# Start NordVPN services
+pkill nordvpnd
+rm -f /run/nordvpn/nordvpnd.sock
+sg vpn -c nordvpnd &
+sleep 3
+
+# Configure NordVPN services
+nordvpn login --username $USER --password "$PASS"
+nordvpn set technology NordLynx
+nordvpn set firewall off
+
+# Create the tun device
+create_tun_device
+
+# Connect NordVPN
+nordvpn connect $COUNTRY
+nordvpn status
+
+# Start Dante Socks 5
+danted -D -f /etc/sockd.conf &>/var/log/dante.log

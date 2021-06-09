@@ -1,7 +1,7 @@
 FROM debian:10
 
 LABEL maintainer="Paul Morris"
-ARG NORDVPN_VERSION=3.10.0-1
+ARG NORDVPN_VER=3.10.0-1
 
 HEALTHCHECK --start-period=1m --interval=10m \
 	CMD if test "$( curl -m 25 -s https://api.nordvpn.com/v1/helpers/ips/insights | jq -r '.["protected"]' )" != "true" ; then exit 1; fi
@@ -11,7 +11,7 @@ RUN apt-get update -y && \
     curl https://repo.nordvpn.com/deb/nordvpn/debian/pool/main/nordvpn-release_1.0.0_all.deb --output /tmp/nordrepo.deb && \
     apt-get install -y /tmp/nordrepo.deb && \
     apt-get update -y && \
-    apt-get install -y nordvpn${NORDVPN_VERSION:+=$NORDVPN_VERSION} && \
+    apt-get install -y nordvpn${NORDVPN_VER:+=$NORDVPN_VER} && \
     apt-get remove -y nordvpn-release && \
     apt-get autoremove -y && \
     apt-get autoclean -y && \
@@ -21,9 +21,9 @@ RUN apt-get update -y && \
 		/var/lib/apt/lists/* \
 		/var/tmp/*
 
-COPY config /
-COPY start.sh /
-COPY sockd.conf /etc/
+COPY configs/config /
+COPY configs/start.sh /
+COPY configs/sockd.conf /etc/
 RUN chmod 777 /start.sh
 RUN chmod 777 /config
 RUN touch /var/log/dante.log

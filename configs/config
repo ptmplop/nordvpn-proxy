@@ -4,11 +4,11 @@
 [[ -z "$USER" ]] && echo "You must specify a valid NordVPN username" && exit 1
 [[ -z "$PASS" ]] && echo "You must specify a valid NordVPN password" && exit 1
 
-echo "Connecting to NordVPN in [$COUNTRY]..."; sleep 0.25
+echo "Connecting to NordVPN in [$COUNTRY]..."
 
-DOCKER_NET="$(ip -o addr show dev eth0 | awk '$3 == "inet" {print $4}')"
+DOCKERNET="$(ip -o addr show dev eth0 | awk '$3 == "inet" {print $4}')"
 
-kill_switch() {
+killswitch() {
 
     iptables -F
     iptables -X
@@ -32,21 +32,21 @@ kill_switch() {
     iptables -A OUTPUT -m owner --gid-owner vpn -j ACCEPT
 
     iptables -t nat -A POSTROUTING -o nordlynx -j MASQUERADE
-    if [[ -n ${DOCKER_NET} ]]; then
-        iptables -A INPUT -s ${DOCKER_NET} -j ACCEPT
-        iptables -A FORWARD -d ${DOCKER_NET} -j ACCEPT
-        iptables -A FORWARD -s ${DOCKER_NET} -j ACCEPT
-        iptables -A OUTPUT -d ${DOCKER_NET} -j ACCEPT
+    if [[ -n ${DOCKERNET} ]]; then
+        iptables -A INPUT -s ${DOCKERNET} -j ACCEPT
+        iptables -A OUTPUT -d ${DOCKERNET} -j ACCEPT
+        iptables -A FORWARD -d ${DOCKERNET} -j ACCEPT
+        iptables -A FORWARD -s ${DOCKERNET} -j ACCEPT
     fi
 }
 
-create_tun_device() {
-        mkdir -p /dev/net
-        [[ -c /dev/net/tun ]] || mknod -m 0666 /dev/net/tun c 10 200
+tun_device() {
+    mkdir -p /dev/net
+    [[ -c /dev/net/tun ]] || mknod -m 0666 /dev/net/tun c 10 200
 }
 
 # Don't allow traffic when disconnected from NordVPN
-kill_switch
+killswitch
 
 # Start NordVPN services
 pkill nordvpnd
@@ -60,7 +60,7 @@ nordvpn set technology NordLynx
 nordvpn set firewall off
 
 # Create the tun device
-create_tun_device
+tun_device
 
 # Connect NordVPN
 nordvpn connect $COUNTRY

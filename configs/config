@@ -4,6 +4,7 @@
 [[ -z "$USER" ]] && echo "You must specify a valid NordVPN username" && exit 1
 [[ -z "$PASS" ]] && echo "You must specify a valid NordVPN password" && exit 1
 
+clear
 echo "Connecting to NordVPN in [$COUNTRY]..."
 
 DOCKERNET="$(ip -o addr show dev eth0 | awk '$3 == "inet" {print $4}')"
@@ -48,7 +49,7 @@ tun_device() {
 start_nordvpn() {
     pkill nordvpnd
     rm -f /run/nordvpn/nordvpnd.sock
-    sg vpn -c nordvpnd &
+    sg vpn -c nordvpnd > /dev/null 2>&1 &
     sleep 2
 }
 
@@ -56,6 +57,7 @@ start_nordvpn() {
 killswitch
 
 # Start NordVPN services
+echo "Starting NordVPN services... "
 start_nordvpn
 
 # Configure NordVPN services
@@ -67,19 +69,28 @@ nordvpn set firewall off
 tun_device
 
 # Connect NordVPN
-nordvpn connect $COUNTRY
-nordvpn status
+nordvpn countries > /tmp/clist
+if grep ${COUNTRY/ /_} /tmp/clist &>/dev/null; then
+    nordvpn connect ${COUNTRY/ /_}
+    nordvpn status
+else
+    echo -e "Invalid country specified, use a country from the valid list\n\n"
+    cat /tmp/clist
+    exit 1
+fi
 
 # Start Dante Socks
+echo -e "Starting Socks5 service\n\n"
 danted -D -f /etc/sockd.conf &
 
 # Keep the connection alive
 while true; do
-    if ! ping -q -I nordlynx -c 2 -W 1 8.8.8.8 >/dev/null || ! ping -q -I nordlynx -c 2 -W 1 1.1.1.1 >/dev/null; then 
+    if ! ping -q -I nordlynx -c 2 -W 1 8.8.8.8 >/dev/null \
+      || ! ping -q -I nordlynx -c 2 -W 1 1.1.1.1 >/dev/null; then 
  	echo "The VPN connectivity is down, reconnecting..."
 	sleep 2
 	nordvpn disconnect
-	nordvpn connect $COUNTRY
+	nordvpn connect ${COUNTRY/ /_}
     fi
     sleep 10
 done
